@@ -1,0 +1,6 @@
+{
+  "name": "LifeOS AI",
+  "description": "Personal AI Operating System for productivity, personal growth, skill mastery, projects, goals, execution, and daily progress",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
