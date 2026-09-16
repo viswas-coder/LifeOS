@@ -21,6 +21,8 @@ import {
   Layers,
   FileText,
   Trash2,
+  Percent,
+  X,
 } from 'lucide-react';
 import { useLifeOS } from '../context/LifeOSContext';
 import {
@@ -32,7 +34,7 @@ import {
   KnowledgeCheck,
   SkillMasteryProject,
 } from '../types';
-import { calculateSkillMastery } from '../utils/progressEngine';
+import { calculateSkillMastery, getSkillMasteryPercentage } from '../utils/progressEngine';
 import { ProgressBar } from './common/ProgressBar';
 import { SkillNextActionCard } from './skills/SkillNextActionCard';
 import { SkillMasteryEvidenceCard } from './skills/SkillMasteryEvidenceCard';
@@ -57,6 +59,8 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
     skills,
     addSkill,
     updateSkill,
+    updateSkillMastery,
+    deleteSkill,
     updateTopicState,
     updateTopicDetails,
     addCustomTopic,
@@ -79,6 +83,8 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
   const [isAdaptModalOpen, setIsAdaptModalOpen] = useState(false);
   const [isLogSessionModalOpen, setIsLogSessionModalOpen] = useState(false);
   const [activeKnowledgeCheck, setActiveKnowledgeCheck] = useState<KnowledgeCheck | null>(null);
+  const [isSetMasteryModalOpen, setIsSetMasteryModalOpen] = useState(false);
+  const [editMasteryValue, setEditMasteryValue] = useState(0);
 
   // Log Practice Session form
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
@@ -216,6 +222,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
           {skills.map(s => {
             const isSelected = s.id === currentSkill?.id;
             const skillMastery = calculateSkillMastery(s, learningSessions, projects);
+            const masteryPct = getSkillMasteryPercentage(s, learningSessions, projects);
 
             return (
               <button
@@ -235,7 +242,7 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                   <div className="flex items-center justify-between gap-1">
                     <span className="truncate text-xs font-semibold text-zinc-100">{s.name}</span>
                     <span className="font-mono text-xs text-zinc-300 font-medium">
-                      {skillMastery.percentage}%
+                      {masteryPct}%
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-zinc-400 mt-0.5 font-mono">
@@ -293,7 +300,21 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-3 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-zinc-800">
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-zinc-800">
+                <button
+                  id="btn-adjust-mastery"
+                  onClick={() => {
+                    const currentPct = getSkillMasteryPercentage(currentSkill, learningSessions, projects);
+                    setEditMasteryValue(currentPct);
+                    setIsSetMasteryModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg border border-zinc-750 bg-zinc-850 hover:bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-300 hover:text-white transition-colors"
+                  title="Adjust or set skill mastery percentage"
+                >
+                  <Percent className="h-3.5 w-3.5 text-zinc-400" />
+                  <span>Set Mastery ({getSkillMasteryPercentage(currentSkill, learningSessions, projects)}%)</span>
+                </button>
+
                 <button
                   id="btn-open-adapt-curriculum"
                   onClick={() => setIsAdaptModalOpen(true)}
@@ -316,6 +337,21 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                 >
                   <Award className="h-3.5 w-3.5" />
                   <span>Log Practice</span>
+                </button>
+
+                <button
+                  id="btn-delete-skill"
+                  onClick={() => {
+                    if (window.confirm(`Are you sure you want to remove the skill "${currentSkill.name}"?`)) {
+                      deleteSkill(currentSkill.id);
+                      const remaining = skills.filter(s => s.id !== currentSkill.id);
+                      setSelectedSkillId(remaining[0]?.id || '');
+                    }
+                  }}
+                  className="flex items-center justify-center rounded-lg border border-zinc-800 hover:border-red-900/60 bg-zinc-900/60 hover:bg-red-950/30 p-2 text-zinc-400 hover:text-red-300 transition-colors"
+                  title="Remove Skill from LifeOS"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
@@ -772,6 +808,84 @@ export const SkillsView: React.FC<SkillsViewProps> = ({
                 className="rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 px-3.5 py-1.5 text-xs font-medium"
               >
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Set Skill Mastery Modal */}
+      {isSetMasteryModalOpen && currentSkill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-xl border border-zinc-800 bg-zinc-950 p-5 space-y-4 shadow-ambient-lg">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-100">Set Skill Mastery</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">{currentSkill.name}</p>
+              </div>
+              <button
+                onClick={() => setIsSetMasteryModalOpen(false)}
+                className="text-zinc-500 hover:text-zinc-300"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-zinc-400">Mastery Percentage</span>
+                <span className="font-mono text-base font-bold text-zinc-100">{editMasteryValue}%</span>
+              </div>
+
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={editMasteryValue}
+                onChange={e => setEditMasteryValue(Number(e.target.value))}
+                className="w-full accent-zinc-200 cursor-pointer"
+              />
+
+              <div className="flex items-center gap-1.5 pt-1">
+                {[0, 20, 40, 60, 80, 100].map(val => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setEditMasteryValue(val)}
+                    className={`flex-1 rounded border px-1.5 py-1 text-[11px] font-mono transition-colors ${
+                      editMasteryValue === val
+                        ? 'border-zinc-500 bg-zinc-800 text-zinc-100 font-semibold'
+                        : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    {val}%
+                  </button>
+                ))}
+              </div>
+
+              <p className="text-[11px] text-zinc-500 leading-normal">
+                Setting this mastery level immediately updates this skill and synchronizes the Skills Progress bar across LifeOS.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setIsSetMasteryModalOpen(false)}
+                className="rounded-lg px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="btn-save-mastery"
+                onClick={() => {
+                  updateSkillMastery(currentSkill.id, editMasteryValue);
+                  setIsSetMasteryModalOpen(false);
+                }}
+                className="rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 px-3.5 py-1.5 text-xs font-semibold"
+              >
+                Save Mastery
               </button>
             </div>
           </div>

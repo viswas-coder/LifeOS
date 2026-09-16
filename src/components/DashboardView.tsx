@@ -20,6 +20,7 @@ import {
 import { useLifeOS } from '../context/LifeOSContext';
 import { askWhatToDoNow, askWhatToLearnNext } from '../services/aiService';
 import { Task, Skill } from '../types';
+import { getSkillMasteryPercentage } from '../utils/progressEngine';
 
 interface DashboardViewProps {
   onNavigate: (view: any) => void;
@@ -36,10 +37,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onSele
     goals,
     calendar,
     wins,
+    learningSessions,
     toggleTaskComplete,
     startMomentumMode,
     setIsQuickAddOpen,
-    dailyProgressPercentage,
+    skillsProgressPercentage,
     addDailyWin,
   } = useLifeOS();
 
@@ -190,19 +192,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onSele
             </div>
           </div>
 
-          {/* Daily Progress Gauge in Grey Styling */}
+          {/* Skills Progress Gauge in Grey Styling */}
           <div className="rounded-xl border border-zinc-800/90 bg-zinc-900/80 backdrop-blur-md p-4 space-y-2.5 shadow-inner">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-zinc-200">Daily Progress</span>
-                <span className="text-[11px] text-zinc-400">Based on completed tasks and habit practice</span>
+                <span className="text-xs font-medium text-zinc-200">Skills Progress</span>
+                <span className="text-[11px] text-zinc-400">
+                  {skills.length === 0
+                    ? 'No skills added yet'
+                    : `Average mastery across ${skills.length} ${skills.length === 1 ? 'skill' : 'skills'}`}
+                </span>
               </div>
-              <span className="font-mono text-sm font-semibold text-zinc-100">{dailyProgressPercentage}%</span>
+              <span className="font-mono text-sm font-semibold text-zinc-100">{skillsProgressPercentage}%</span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800">
               <div
                 className="h-full rounded-full bg-zinc-300 transition-all duration-500 ease-out"
-                style={{ width: `${dailyProgressPercentage}%` }}
+                style={{ width: `${skillsProgressPercentage}%` }}
               />
             </div>
           </div>
@@ -453,30 +459,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onSele
             </div>
 
             <div className="space-y-3">
-              {skills.slice(0, 3).map(skill => (
-                <div
-                  key={skill.id}
-                  onClick={() => onSelectSkill ? onSelectSkill(skill.id) : onNavigate('skills')}
-                  className="cursor-pointer group space-y-1.5 rounded-lg p-2 hover:bg-zinc-850 transition-colors"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-zinc-200 group-hover:text-white transition-colors">
-                      {skill.name}
-                    </span>
-                    <span className="font-mono text-zinc-400">{skill.currentMastery}%</span>
+              {skills.slice(0, 3).map(skill => {
+                const masteryPct = getSkillMasteryPercentage(skill, learningSessions, projects);
+                return (
+                  <div
+                    key={skill.id}
+                    onClick={() => onSelectSkill ? onSelectSkill(skill.id) : onNavigate('skills')}
+                    className="cursor-pointer group space-y-1.5 rounded-lg p-2 hover:bg-zinc-850 transition-colors"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-zinc-200 group-hover:text-white transition-colors">
+                        {skill.name}
+                      </span>
+                      <span className="font-mono text-zinc-400">{masteryPct}%</span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+                      <div
+                        className="h-full rounded-full bg-zinc-300 transition-all duration-300"
+                        style={{ width: `${masteryPct}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-zinc-500">
+                      <span>{skill.domains.length} modules</span>
+                      <span className="capitalize">{skill.state}</span>
+                    </div>
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
-                    <div
-                      className="h-full rounded-full bg-zinc-300 transition-all duration-300"
-                      style={{ width: `${skill.currentMastery}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] text-zinc-500">
-                    <span>{skill.domains.length} modules</span>
-                    <span className="capitalize">{skill.state}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
 
               {skills.length === 0 && (
                 <div className="py-6 text-center text-xs text-zinc-500">

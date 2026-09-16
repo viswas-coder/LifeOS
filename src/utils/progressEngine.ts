@@ -377,30 +377,32 @@ export function calculateSkillMastery(
 
   const positiveEvidence: string[] = [];
   const needsImprovement: string[] = [];
+  const storedMastery = typeof skill.currentMastery === 'number' ? Math.max(0, Math.min(100, Math.round(skill.currentMastery))) : 0;
 
   // If no topics exist in the roadmap yet
   if (totalTopics === 0 && sessionCount === 0) {
-    const levelInfo = getMasteryLevelInfo(0);
+    const baseline = storedMastery;
+    const levelInfo = getMasteryLevelInfo(baseline);
     return {
-      value: 0,
+      value: baseline,
       maximum: 100,
-      percentage: 0,
-      status: 'not_started',
-      statusLabel: 'Not Started',
-      detailLabel: 'No progress yet',
-      hasMeasurableData: false,
+      percentage: baseline,
+      status: levelInfo.state as ProgressState,
+      statusLabel: levelInfo.label,
+      detailLabel: baseline > 0 ? `${baseline}% verified baseline` : 'No progress yet',
+      hasMeasurableData: baseline > 0,
       masteryInfo: levelInfo,
       evidence: {
-        positive: [],
+        positive: baseline > 0 ? [`Current assessed baseline mastery: ${baseline}%`] : [],
         needsImprovement: ['Generate or add syllabus topics to begin learning.'],
         levelTitle: levelInfo.label,
         levelDescription: levelInfo.description,
       },
       breakdown: {
-        topicCompletion: { score: 0, completedTopics: 0, totalTopics: 0 },
-        practiceVolume: { score: 0, hoursLogged: 0, sessionsCount: 0 },
-        projectApplication: { score: 0, completedCount: 0, totalCount: 0 },
-        knowledgeRetention: { score: 0, checksPassed: 0, confidenceScore: 0 },
+        topicCompletion: { score: Math.round(baseline * 0.35), completedTopics: 0, totalTopics: 0 },
+        practiceVolume: { score: Math.round(baseline * 0.25), hoursLogged: 0, sessionsCount: 0 },
+        projectApplication: { score: Math.round(baseline * 0.20), completedCount: 0, totalCount: 0 },
+        knowledgeRetention: { score: Math.round(baseline * 0.20), checksPassed: 0, confidenceScore: 0 },
       },
       completedTopics: 0,
       totalTopics: 0,
@@ -475,6 +477,11 @@ export function calculateSkillMastery(
   // Combined score
   let rawMastery = Math.round(topicScore + practiceScore + applicationScore + retentionScore);
 
+  // If explicit stored mastery exists (e.g. set by user or imported), harmonize as baseline
+  if (storedMastery > 0 && rawMastery === 0) {
+    rawMastery = storedMastery;
+  }
+
   // Verification Gate: To reach 100% (Mastered), require strict proof:
   // Cannot be 100% unless at least 1 completed project, 3 sessions, and all topics done
   if (rawMastery >= 100) {
@@ -535,6 +542,48 @@ export function calculateSkillMastery(
     sessionCount,
     completedProjectsCount: totalProjectsCompleted,
   };
+}
+
+/**
+ * Single source of truth for retrieving a skill's mastery percentage.
+ * Guarantees that Dashboard, Skills view, cards, and overall gauges stay 100% in sync.
+ */
+export function getSkillMasteryPercentage(
+  skill: Skill,
+  allSessions: SkillLearningSession[] = [],
+  allProjects: Project[] = []
+): number {
+  if (!skill) return 0;
+  const mastery = calculateSkillMastery(skill, allSessions, allProjects);
+  return mastery.percentage;
+}
+
+/**
+ * Calculates overall Skills Progress percentage.
+ *
+ * Requirements:
+ * - Calculate the percentage ONLY from the user's added skills.
+ * - Each skill has its own mastery percentage.
+ * - The overall Skills Progress is the average mastery percentage of all added skills.
+ *   Example: Python = 40%, UI Design = 80%, Public Speaking = 20%
+ *   Overall Skills Progress = (40 + 80 + 20) / 3 = 46.7% -> display 47%.
+ * - If the user has no skills added, display 0%.
+ * - Adding a new skill immediately includes it in the calculation.
+ * - Removing a skill immediately recalculates the percentage.
+ * - Updating a skill's mastery/progress immediately updates the dashboard.
+ * - Do NOT calculate this from daily tasks, completed tasks, calendar events, or today's activity.
+ * - No hard-coded 75%, 50%, or placeholder percentages.
+ */
+export function calculateOverallSkillsProgress(
+  skills: Skill[] = [],
+  allSessions: SkillLearningSession[] = [],
+  allProjects: Project[] = []
+): number {
+  if (!skills || skills.length === 0) return 0;
+  const totalMastery = skills.reduce((sum, skill) => {
+    return sum + getSkillMasteryPercentage(skill, allSessions, allProjects);
+  }, 0);
+  return Math.round(totalMastery / skills.length);
 }
 
 /**

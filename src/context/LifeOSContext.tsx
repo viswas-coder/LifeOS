@@ -46,7 +46,7 @@ import {
   AIContextPayload,
   GenerateRoadmapOptions,
 } from '../services/aiService';
-import { calculateSkillMastery } from '../utils/progressEngine';
+import { calculateSkillMastery, calculateOverallSkillsProgress, getMasteryLevelInfo, getSkillMasteryPercentage } from '../utils/progressEngine';
 
 export type AuthStatus = 'loading' | 'needs_setup' | 'unauthenticated' | 'authenticated';
 
@@ -112,6 +112,7 @@ interface LifeOSContextType {
   // Skills
   addSkill: (name: string, description: string, options?: GenerateRoadmapOptions | string) => Promise<Skill>;
   updateSkill: (id: string, updates: Partial<Skill>) => void;
+  updateSkillMastery: (id: string, mastery: number) => void;
   deleteSkill: (id: string) => void;
   logSkillLearningSession: (sessionData: {
     skillId: string;
@@ -192,6 +193,7 @@ interface LifeOSContextType {
   restoreDefaults: () => void;
 
   // Metrics
+  skillsProgressPercentage: number;
   dailyProgressPercentage: number;
 }
 
@@ -482,24 +484,17 @@ export function LifeOSProvider({ children }: { children: ReactNode }) {
     currentTime: new Date().toISOString(),
   }), [tasks, projects, skills, goals, memory, settings]);
 
-  // Daily Progress Calculation
-  const dailyProgressPercentage = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    const todayTasks = tasks.filter(t => t.dueDate === today || t.status === 'in_progress');
-    if (todayTasks.length === 0) return 75; // Baseline high momentum
-    const completed = todayTasks.filter(t => t.status === 'completed').length;
-    const taskScore = (completed / todayTasks.length) * 60;
+  // Skills Progress Calculation
+  // Calculated STRICTLY and ONLY from the user's added skills.
+  // Overall Skills Progress = average mastery percentage of all added skills.
+  // If the user has no skills added, display 0%.
+  // Do NOT calculate this from daily tasks, completed tasks, calendar events, or today's activity.
+  const skillsProgressPercentage = useMemo(() => {
+    return calculateOverallSkillsProgress(skills, learningSessions, projects);
+  }, [skills, learningSessions, projects]);
 
-    // Add boost for skill sessions logged today
-    const sessionToday = learningSessions.some(s => s.date.startsWith(today));
-    const sessionScore = sessionToday ? 30 : 15;
-
-    // Add boost for wins logged today
-    const winsToday = wins.filter(w => w.date === today).length;
-    const winScore = Math.min(10, winsToday * 5);
-
-    return Math.min(100, Math.round(taskScore + sessionScore + winScore));
-  }, [tasks, learningSessions, wins]);
+  // Backwards compatibility alias
+  const dailyProgressPercentage = skillsProgressPercentage;
 
   // Settings & Profile
   const updateProfile = (updates: Partial<UserProfile>) => {
@@ -639,8 +634,8 @@ export function LifeOSProvider({ children }: { children: ReactNode }) {
       availableTime: opts.availableTime,
       learningStyle: opts.learningStyle,
       targetMastery: 100,
-      currentMastery: 0,
-      state: 'novice',
+      currentMastery: typeof opts.initialMastery === 'number' ? Math.max(0, Math.min(100, Math.round(opts.initialMastery))) : 0,
+      state: typeof opts.initialMastery === 'number' && opts.initialMastery > 0 ? (getMasteryLevelInfo(opts.initialMastery).state as any) : 'novice',
       domains,
       masteryProjects,
       rationale: roadmapData.rationale,
@@ -686,7 +681,23 @@ export function LifeOSProvider({ children }: { children: ReactNode }) {
   };
 
   const updateSkill = (id: string, updates: Partial<Skill>) => {
-    setSkills(prev => prev.map(s => (s.id === id ? { ...s, ...updates } : s)));
+    setSkills(prev =>
+      prev.map(s => {
+        if (s.id !== id) return s;
+        const updated = { ...s, ...updates };
+        if (updates.currentMastery !== undefined) {
+          const clamped = Math.max(0, Math.min(100, Math.round(updates.currentMastery)));
+          updated.currentMastery = clamped;
+          updated.state = getMasteryLevelInfo(clamped).state as any;
+        }
+        return updated;
+      })
+    );
+  };
+
+  const updateSkillMastery = (id: string, mastery: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(mastery)));
+    updateSkill(id, { currentMastery: clamped });
   };
 
   const deleteSkill = (id: string) => {
@@ -1655,7 +1666,9 @@ export function LifeOSProvider({ children }: { children: ReactNode }) {
         exportDataJSON,
         importDataJSON,
         restoreDefaults,
+        skillsProgressPercentage,
         dailyProgressPercentage,
+        updateSkillMastery,
       }}
     >
       {children}

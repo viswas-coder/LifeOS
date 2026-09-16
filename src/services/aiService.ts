@@ -86,6 +86,7 @@ export interface GenerateRoadmapOptions {
   linkedProjects?: string[];
   linkedGoals?: string[];
   targetMastery?: number;
+  initialMastery?: number;
 }
 
 export async function generateSkillRoadmap(

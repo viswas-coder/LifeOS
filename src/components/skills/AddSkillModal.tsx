@@ -28,6 +28,7 @@ export const AddSkillModal: React.FC<AddSkillModalProps> = ({
   const [currentLevel, setCurrentLevel] = useState('beginner');
   const [learningStyle, setLearningStyle] = useState<'hands_on' | 'theory_first' | 'project_based' | 'comprehensive'>('hands_on');
   const [hoursPerWeek, setHoursPerWeek] = useState(5);
+  const [initialMastery, setInitialMastery] = useState(0);
   const [primaryGoal, setPrimaryGoal] = useState('');
   const [linkedProjectId, setLinkedProjectId] = useState<string>('');
   const [linkedGoalId, setLinkedGoalId] = useState<string>('');
@@ -68,6 +69,7 @@ export const AddSkillModal: React.FC<AddSkillModalProps> = ({
         category: currentCategoryGroup.name,
         subcategory: currentCategoryGroup.subcategories.find(s => s.id === selectedSubcategoryId)?.name,
         currentLevel: currentLevel as any,
+        initialMastery: Math.max(0, Math.min(100, Math.round(initialMastery))),
         primaryGoal: primaryGoal.trim() || undefined,
         learningStyle,
         weeklyHours: hoursPerWeek,
@@ -237,6 +239,38 @@ export const AddSkillModal: React.FC<AddSkillModalProps> = ({
                 placeholder="e.g. Build production microservices engine"
                 className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
               />
+            </div>
+          </div>
+
+          {/* Initial Baseline Mastery */}
+          <div className="rounded-lg border border-zinc-850 bg-zinc-900/60 p-3 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-zinc-300">Initial Baseline Mastery</span>
+              <span className="font-mono font-bold text-zinc-200">{initialMastery}%</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={initialMastery}
+              onChange={e => setInitialMastery(Number(e.target.value))}
+              className="w-full accent-zinc-200 cursor-pointer"
+            />
+            <div className="flex items-center gap-1.5 pt-0.5">
+              {[0, 20, 40, 60, 80, 100].map(val => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setInitialMastery(val)}
+                  className={`flex-1 rounded border px-1 py-0.5 text-[10px] font-mono transition-colors ${
+                    initialMastery === val
+                      ? 'border-zinc-500 bg-zinc-800 text-zinc-100 font-semibold'
+                      : 'border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  {val}%
+                </button>
+              ))}
             </div>
           </div>
 

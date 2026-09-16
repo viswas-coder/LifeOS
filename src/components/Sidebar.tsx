@@ -47,7 +47,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed,
   onToggleCollapse,
 }) => {
-  const { profile, dailyProgressPercentage, startMomentumMode, skills, currentUser, logout } = useLifeOS();
+  const { profile, skillsProgressPercentage, startMomentumMode, skills, currentUser, logout } = useLifeOS();
 
   const navItems: { id: NavView; label: string; icon: React.FC<{ className?: string }>; badge?: string | number }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -102,17 +102,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* Daily Progress Gauge (When expanded) */}
+      {/* Skills Progress Gauge (When expanded) */}
       {!isCollapsed && (
         <div className="mx-3 mt-3 rounded-lg border border-zinc-800 bg-zinc-900/80 p-2.5">
           <div className="flex items-center justify-between text-[11px] mb-1.5 font-medium">
-            <span className="text-zinc-400">Daily Progress</span>
-            <span className="font-mono text-zinc-200">{dailyProgressPercentage}%</span>
+            <span className="text-zinc-400">Skills Progress</span>
+            <span className="font-mono text-zinc-200">{skillsProgressPercentage}%</span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
             <div
               className="h-full rounded-full bg-zinc-300 transition-all duration-300"
-              style={{ width: `${dailyProgressPercentage}%` }}
+              style={{ width: `${skillsProgressPercentage}%` }}
             />
           </div>
         </div>
