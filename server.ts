@@ -80,6 +80,9 @@ function getGeminiClient(): GoogleGenAI | null {
   return geminiClient;
 }
 
+// In-memory cache for recent AI generation to prevent burst duplicate calls from exhausting quota
+const promptResponseCache = new Map<string, { timestamp: number; response: any }>();
+
 // Resilient helper to execute content generation with automatic model fallback
 async function generateGeminiContentWithFallback(
   ai: GoogleGenAI,
@@ -88,23 +91,40 @@ async function generateGeminiContentWithFallback(
     config?: any;
   }
 ): Promise<any | null> {
-  // Use gemini-2.5-flash as the primary high-availability workhorse model,
-  // cascading to gemini-flash-latest and gemini-3.8-flash.
-  const models = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-3.8-flash'];
+  // Simple cache key derivation
+  const cacheKey = typeof request.contents === 'string'
+    ? request.contents.slice(0, 300)
+    : JSON.stringify(request.contents).slice(0, 300);
 
-  for (const model of models) {
+  const cached = promptResponseCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 25000) {
+    return cached.response;
+  }
+
+  // Model fallback tier: primary gemini-3.8-flash, high-capacity gemini-3.1-flash-lite, then gemini-flash-latest
+  const models = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
     try {
       const response = await ai.models.generateContent({
         ...request,
         model,
       });
       if (response && response.text) {
+        promptResponseCache.set(cacheKey, { timestamp: Date.now(), response });
+        // Cap cache size
+        if (promptResponseCache.size > 50) {
+          const oldestKey = promptResponseCache.keys().next().value;
+          if (oldestKey) promptResponseCache.delete(oldestKey);
+        }
         return response;
       }
-    } catch (err: any) {
-      // Gracefully catch 503 (high demand), 429 (quota), or network issue and continue
-      const msg = err?.message || String(err);
-      console.warn(`[LifeOS AI] Model ${model} encountered notice: ${msg.slice(0, 100)}... trying fallback.`);
+    } catch {
+      // Quietly wait a brief interval on temporary rate limit / demand spike before trying fallback model
+      if (i < models.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 350));
+      }
     }
   }
   return null;

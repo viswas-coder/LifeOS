@@ -59,9 +59,44 @@ export const FloatingStickyNote: React.FC<FloatingStickyNoteProps> = ({ note, on
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Local state for smooth dragging and resizing
+  const [position, setPosition] = useState({
+    x: note.position?.x ?? 100,
+    y: note.position?.y ?? 100,
+  });
+  const [size, setSize] = useState({
+    width: note.size?.width || 340,
+    height: note.size?.height || 480,
+  });
+
+  const lastPosRef = useRef(position);
+  lastPosRef.current = position;
+  const lastSizeRef = useRef(size);
+  lastSizeRef.current = size;
+
   // Picture-in-Picture window reference
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
   const pipWindowRef = useRef<Window | null>(null);
+
+  // Clean up PiP state on initial mount if opened in prior session
+  useEffect(() => {
+    if (note.isExternalPiPOpen && !pipWindowRef.current) {
+      updateStickyNote(note.id, { isExternalPiPOpen: false });
+    }
+  }, []);
+
+  // Sync position and size if updated from outside while not dragging/resizing
+  useEffect(() => {
+    if (!isDragging && note.position) {
+      setPosition(note.position);
+    }
+  }, [note.position?.x, note.position?.y]);
+
+  useEffect(() => {
+    if (!isResizing && note.size) {
+      setSize(note.size);
+    }
+  }, [note.size?.width, note.size?.height]);
 
   // Dragging state for in-tab floating
   const [isDragging, setIsDragging] = useState(false);
@@ -70,6 +105,15 @@ export const FloatingStickyNote: React.FC<FloatingStickyNoteProps> = ({ note, on
     mouseY: 0,
     noteX: note.position?.x || 100,
     noteY: note.position?.y || 100,
+  });
+
+  // Resizing state
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartRef = useRef<{ mouseX: number; mouseY: number; startW: number; startH: number }>({
+    mouseX: 0,
+    mouseY: 0,
+    startW: 340,
+    startH: 480,
   });
 
   // Today's ISO date string (YYYY-MM-DD)
@@ -120,8 +164,8 @@ export const FloatingStickyNote: React.FC<FloatingStickyNoteProps> = ({ note, on
     dragStartRef.current = {
       mouseX: e.clientX,
       mouseY: e.clientY,
-      noteX: note.position?.x ?? 100,
-      noteY: note.position?.y ?? 100,
+      noteX: position.x,
+      noteY: position.y,
     };
   };
 
@@ -131,19 +175,20 @@ export const FloatingStickyNote: React.FC<FloatingStickyNoteProps> = ({ note, on
       const dx = e.clientX - dragStartRef.current.mouseX;
       const dy = e.clientY - dragStartRef.current.mouseY;
 
-      const maxX = Math.max(0, window.innerWidth - (note.size?.width || 340));
+      const maxX = Math.max(0, window.innerWidth - (size.width || 340));
       const maxY = Math.max(0, window.innerHeight - 60);
 
       const newX = Math.min(Math.max(10, dragStartRef.current.noteX + dx), maxX);
       const newY = Math.min(Math.max(10, dragStartRef.current.noteY + dy), maxY);
 
-      updateStickyNote(note.id, {
-        position: { x: newX, y: newY },
-      });
+      setPosition({ x: newX, y: newY });
     };
 
     const handleMouseUp = () => {
       setIsDragging(false);
+      updateStickyNote(note.id, {
+        position: lastPosRef.current,
+      });
     };
 
     if (isDragging) {
@@ -154,7 +199,49 @@ export const FloatingStickyNote: React.FC<FloatingStickyNoteProps> = ({ note, on
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, note.id, note.size?.width, updateStickyNote]);
+  }, [isDragging, size.width, note.id, updateStickyNote]);
+
+  // Handle Resizing
+  const handleResizeMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsResizing(true);
+    resizeStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      startW: size.width,
+      startH: size.height,
+    };
+  };
+
+  useEffect(() => {
+    const handleResizeMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const dx = e.clientX - resizeStartRef.current.mouseX;
+      const dy = e.clientY - resizeStartRef.current.mouseY;
+
+      const newW = Math.max(280, Math.min(window.innerWidth - 20, resizeStartRef.current.startW + dx));
+      const newH = Math.max(220, Math.min(window.innerHeight - 20, resizeStartRef.current.startH + dy));
+
+      setSize({ width: Math.round(newW), height: Math.round(newH) });
+    };
+
+    const handleResizeMouseUp = () => {
+      setIsResizing(false);
+      updateStickyNote(note.id, {
+        size: lastSizeRef.current,
+      });
+    };
+
+    if (isResizing) {
+      window.addEventListener('mousemove', handleResizeMouseMove);
+      window.addEventListener('mouseup', handleResizeMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleResizeMouseMove);
+      window.removeEventListener('mouseup', handleResizeMouseUp);
+    };
+  }, [isResizing, note.id, updateStickyNote]);
 
   // Add a task directly from the sticky note
   const handleAddNewTask = (e?: React.FormEvent) => {
@@ -201,47 +288,65 @@ export const FloatingStickyNote: React.FC<FloatingStickyNoteProps> = ({ note, on
   };
 
   // --- PICTURE-IN-PICTURE (FLOAT ACROSS TABS & DESKTOP) ---
+  const applyStylesToDetachedWindow = (targetDoc: Document) => {
+    // Base styling and font variables
+    const baseStyle = targetDoc.createElement('style');
+    baseStyle.textContent = `
+      :root { color-scheme: dark; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #09090b;
+        color: #f4f4f5;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        user-select: none;
+        -webkit-font-smoothing: antialiased;
+        overflow: hidden;
+      }
+      * { box-sizing: border-box; }
+      ::-webkit-scrollbar { width: 4px; height: 4px; }
+      ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+    `;
+    targetDoc.head.appendChild(baseStyle);
+
+    // Clone all existing style sheets and link tags
+    document.querySelectorAll('link[rel="stylesheet"], style').forEach(el => {
+      try {
+        targetDoc.head.appendChild(el.cloneNode(true));
+      } catch (err) {
+        console.warn('Could not copy stylesheet element:', err);
+      }
+    });
+  };
+
   const handleTogglePictureInPicture = async () => {
     // If PiP is currently open, close it
     if (pipWindow) {
-      pipWindow.close();
+      try {
+        pipWindow.close();
+      } catch {}
       setPipWindow(null);
       pipWindowRef.current = null;
       updateStickyNote(note.id, { isExternalPiPOpen: false });
       return;
     }
 
-    // Try modern Document Picture-in-Picture API
+    // Try modern Document Picture-in-Picture API (available in Chrome/Edge 116+)
     if ('documentPictureInPicture' in window) {
       try {
         const dpip = (window as any).documentPictureInPicture;
         const win = await dpip.requestWindow({
-          width: note.size?.width || 360,
-          height: note.size?.height || 500,
+          width: size.width || 360,
+          height: size.height || 500,
           disallowReturnToOpener: false,
         });
 
-        // Copy all CSS style sheets and link tags from main document to PiP document
-        Array.from(document.styleSheets).forEach(styleSheet => {
-          try {
-            const cssRules = Array.from(styleSheet.cssRules)
-              .map(rule => rule.cssText)
-              .join('');
-            const style = win.document.createElement('style');
-            style.textContent = cssRules;
-            win.document.head.appendChild(style);
-          } catch {
-            if (styleSheet.href) {
-              const link = win.document.createElement('link');
-              link.rel = 'stylesheet';
-              link.href = styleSheet.href;
-              win.document.head.appendChild(link);
-            }
-          }
-        });
-
-        // Ensure fonts and dark background styling match
+        applyStylesToDetachedWindow(win.document);
         win.document.title = `${note.title || 'LifeOS Daily Progress Note'}`;
+        win.document.documentElement.className = 'dark';
         win.document.body.className = 'bg-zinc-950 text-zinc-100 font-sans antialiased m-0 p-0 overflow-hidden';
 
         const container = win.document.createElement('div');
@@ -249,11 +354,14 @@ export const FloatingStickyNote: React.FC<FloatingStickyNoteProps> = ({ note, on
         container.className = 'h-screen w-screen flex flex-col overflow-hidden';
         win.document.body.appendChild(container);
 
-        win.addEventListener('pagehide', () => {
+        const handleClosePiP = () => {
           setPipWindow(null);
           pipWindowRef.current = null;
           updateStickyNote(note.id, { isExternalPiPOpen: false });
-        });
+        };
+
+        win.addEventListener('pagehide', handleClosePiP);
+        win.addEventListener('beforeunload', handleClosePiP);
 
         setPipWindow(win);
         pipWindowRef.current = win;
@@ -269,30 +377,13 @@ export const FloatingStickyNote: React.FC<FloatingStickyNoteProps> = ({ note, on
       const popout = window.open(
         '',
         `lifeos_note_${note.id}`,
-        `width=${note.size?.width || 360},height=${note.size?.height || 500},menubar=no,toolbar=no,location=no,status=no,resizable=yes`
+        `width=${size.width || 360},height=${size.height || 500},menubar=no,toolbar=no,location=no,status=no,resizable=yes`
       );
 
       if (popout) {
-        // Copy styles
-        Array.from(document.styleSheets).forEach(styleSheet => {
-          try {
-            const cssRules = Array.from(styleSheet.cssRules)
-              .map(rule => rule.cssText)
-              .join('');
-            const style = popout.document.createElement('style');
-            style.textContent = cssRules;
-            popout.document.head.appendChild(style);
-          } catch {
-            if (styleSheet.href) {
-              const link = popout.document.createElement('link');
-              link.rel = 'stylesheet';
-              link.href = styleSheet.href;
-              popout.document.head.appendChild(link);
-            }
-          }
-        });
-
+        applyStylesToDetachedWindow(popout.document);
         popout.document.title = `${note.title || 'LifeOS Daily Progress Note'}`;
+        popout.document.documentElement.className = 'dark';
         popout.document.body.className = 'bg-zinc-950 text-zinc-100 font-sans antialiased m-0 p-0 overflow-hidden';
 
         const container = popout.document.createElement('div');
@@ -300,11 +391,14 @@ export const FloatingStickyNote: React.FC<FloatingStickyNoteProps> = ({ note, on
         container.className = 'h-screen w-screen flex flex-col overflow-hidden';
         popout.document.body.appendChild(container);
 
-        popout.addEventListener('beforeunload', () => {
+        const handleClosePopout = () => {
           setPipWindow(null);
           pipWindowRef.current = null;
           updateStickyNote(note.id, { isExternalPiPOpen: false });
-        });
+        };
+
+        popout.addEventListener('beforeunload', handleClosePopout);
+        popout.addEventListener('pagehide', handleClosePopout);
 
         setPipWindow(popout);
         pipWindowRef.current = popout;
@@ -673,9 +767,9 @@ export const FloatingStickyNote: React.FC<FloatingStickyNoteProps> = ({ note, on
         <div
           className="pointer-events-auto absolute rounded-xl p-3 shadow-xl border border-emerald-500/30 bg-zinc-900/95 backdrop-blur flex flex-col gap-2 z-40 transition-all text-xs"
           style={{
-            left: `${note.position?.x || 100}px`,
-            top: `${note.position?.y || 100}px`,
-            width: `${note.size?.width || 340}px`,
+            left: `${position.x}px`,
+            top: `${position.y}px`,
+            width: `${size.width}px`,
           }}
         >
           <div className="flex items-center justify-between">
@@ -685,7 +779,11 @@ export const FloatingStickyNote: React.FC<FloatingStickyNoteProps> = ({ note, on
             </div>
             <button
               onClick={() => {
-                if (pipWindow) pipWindow.close();
+                if (pipWindow) {
+                  try {
+                    pipWindow.close();
+                  } catch {}
+                }
                 setPipWindow(null);
                 updateStickyNote(note.id, { isExternalPiPOpen: false });
               }}
@@ -702,16 +800,33 @@ export const FloatingStickyNote: React.FC<FloatingStickyNoteProps> = ({ note, on
             <span className="text-[10px] text-zinc-500">
               {dailyStats.completed}/{dailyStats.total} Tasks Completed ({dailyStats.percent}%)
             </span>
-            <button
-              onClick={() => {
-                if (pipWindow) pipWindow.close();
-                setPipWindow(null);
-                updateStickyNote(note.id, { isExternalPiPOpen: false });
-              }}
-              className="text-[10px] px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded font-medium transition-colors"
-            >
-              Dock to Tab
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => {
+                  try {
+                    pipWindow?.focus();
+                  } catch {}
+                }}
+                className="text-[10px] px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded font-medium transition-colors"
+                title="Bring detached window to front"
+              >
+                Focus Window
+              </button>
+              <button
+                onClick={() => {
+                  if (pipWindow) {
+                    try {
+                      pipWindow.close();
+                    } catch {}
+                  }
+                  setPipWindow(null);
+                  updateStickyNote(note.id, { isExternalPiPOpen: false });
+                }}
+                className="text-[10px] px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded font-medium transition-colors"
+              >
+                Dock to Tab
+              </button>
+            </div>
           </div>
         </div>
 
@@ -724,15 +839,29 @@ export const FloatingStickyNote: React.FC<FloatingStickyNoteProps> = ({ note, on
   // Standard in-tab floating rendering
   return (
     <div
-      className="pointer-events-auto absolute z-40 transition-shadow"
+      className="pointer-events-auto absolute z-40 transition-shadow select-none group/floating"
       style={{
-        left: `${note.position?.x || 100}px`,
-        top: `${note.position?.y || 100}px`,
-        width: `${note.size?.width || 340}px`,
-        height: note.isCollapsed ? 'auto' : `${note.size?.height || 480}px`,
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        width: `${size.width}px`,
+        height: note.isCollapsed ? 'auto' : `${size.height}px`,
       }}
     >
       {renderNoteContent(false)}
+
+      {/* Resize Handle at Bottom Right Corner */}
+      {!note.isCollapsed && (
+        <div
+          onMouseDown={handleResizeMouseDown}
+          className="absolute bottom-1 right-1 w-4 h-4 cursor-se-resize flex items-end justify-end p-0.5 text-zinc-500 hover:text-zinc-200 select-none z-20 opacity-40 group-hover/floating:opacity-100 transition-opacity"
+          title="Drag to resize note"
+        >
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" className="stroke-current">
+            <line x1="7" y1="1" x2="1" y2="7" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="7" y1="4" x2="4" y2="7" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </div>
+      )}
     </div>
   );
 };

@@ -33,8 +33,8 @@ export const SkillNextActionCard: React.FC<SkillNextActionCardProps> = ({
     try {
       const data = await getSkillNextAction(skill, 45, projects, goals);
       setRecommendation(data);
-    } catch (err) {
-      console.error('Failed to get next action', err);
+    } catch {
+      // Local fallback handled in service
     } finally {
       setLoading(false);
     }

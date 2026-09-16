@@ -39,8 +39,8 @@ export const AnalyticsView: React.FC = () => {
     try {
       const res = await generateWeeklyReviewAI(tasks, skills, projects, learningSessions);
       setWeeklyReviewData(res);
-    } catch (e) {
-      console.error(e);
+    } catch {
+      // Local fallback handled in service
     } finally {
       setIsGeneratingReview(false);
     }

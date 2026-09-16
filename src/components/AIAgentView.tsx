@@ -51,8 +51,8 @@ export const AIAgentView: React.FC = () => {
     setIsSending(true);
     try {
       await sendChatMessage(text);
-    } catch (e) {
-      console.error(e);
+    } catch {
+      // Gracefully handled inside sendChatMessage fallback
     } finally {
       setIsSending(false);
     }

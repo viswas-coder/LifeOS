@@ -9,7 +9,7 @@ export const FloatingStickyNotesHost: React.FC = () => {
   if (floatingNotes.length === 0) return null;
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-35 overflow-hidden">
+    <div className="fixed inset-0 pointer-events-none z-[45] overflow-hidden">
       {floatingNotes.map(note => (
         <FloatingStickyNote
           key={note.id}

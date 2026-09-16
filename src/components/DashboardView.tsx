@@ -83,14 +83,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onSele
   const refreshRecommendations = async () => {
     setIsLoadingRecs(true);
     try {
-      const [doNow, learnNext] = await Promise.all([
-        askWhatToDoNow(tasks, projects, skills, goals, 45),
-        askWhatToLearnNext(skills, projects),
-      ]);
+      const doNow = await askWhatToDoNow(tasks, projects, skills, goals, 45);
       setWhatToDoNow(doNow);
+      const learnNext = await askWhatToLearnNext(skills, projects);
       setWhatToLearnNext(learnNext);
-    } catch (e) {
-      console.error(e);
+    } catch {
+      // Local fallback handled within aiService
     } finally {
       setIsLoadingRecs(false);
     }

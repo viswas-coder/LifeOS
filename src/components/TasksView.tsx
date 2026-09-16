@@ -63,8 +63,8 @@ export const TasksView: React.FC = () => {
     setIsAiBreakingDown(taskId);
     try {
       await breakdownTaskAI(taskId);
-    } catch (e) {
-      console.error(e);
+    } catch {
+      // Local fallback handled in context
     } finally {
       setIsAiBreakingDown(null);
     }

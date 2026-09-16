@@ -110,21 +110,56 @@ export const IdeasAndNotesView: React.FC = () => {
           </div>
 
           {activeTab === 'notes' && (
-            <button
-              onClick={handleCreateNote}
-              className="flex items-center gap-1.5 rounded-lg bg-neutral-100 hover:bg-white text-neutral-950 px-3 py-1.5 text-xs font-medium transition-all shadow-ambient-sm"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span>New Note</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={openDailyProgressStickyNote}
+                className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 px-3 py-1.5 text-xs font-medium transition-all shadow-sm"
+                title="Launch floating sticky note that tracks your daily progress and can float across other tabs"
+              >
+                <Flame className="h-3.5 w-3.5 text-emerald-400" />
+                <span>Launch Floating Daily Note</span>
+              </button>
+
+              <button
+                onClick={handleCreateNote}
+                className="flex items-center gap-1.5 rounded-lg bg-neutral-100 hover:bg-white text-neutral-950 px-3 py-1.5 text-xs font-medium transition-all shadow-ambient-sm"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>New Note</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
 
       {/* TAB 1: STICKY NOTES */}
       {activeTab === 'notes' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {stickyNotes.map(note => {
+        <div className="space-y-4">
+          {/* Quick Floating sticky note info bar */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-xl border border-white/[0.08] bg-white/[0.02]">
+            <div className="flex items-center gap-2.5 text-xs text-neutral-300">
+              <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
+                <ExternalLink className="h-4 w-4" />
+              </div>
+              <div>
+                <span className="font-semibold text-neutral-200">Always-On-Top Floating Notes: </span>
+                <span className="text-neutral-400">
+                  Track your daily progress checklist and scratchpad notes across any window tab, even after minimizing LifeOS.
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={openDailyProgressStickyNote}
+              className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-neutral-200 transition-colors"
+            >
+              <ListTodo className="h-3.5 w-3.5 text-emerald-400" />
+              <span>{stickyNotes.some(n => n.isFloatingOpen) ? 'Show Active Floating Note' : 'Open Floating Note'}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {stickyNotes.map(note => {
             return (
               <div
                 key={note.id}
@@ -207,6 +242,7 @@ export const IdeasAndNotesView: React.FC = () => {
               No sticky notes yet. Click "+ New Note" to create one.
             </div>
           )}
+          </div>
         </div>
       )}
 

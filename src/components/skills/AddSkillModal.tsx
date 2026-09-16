@@ -77,8 +77,8 @@ export const AddSkillModal: React.FC<AddSkillModalProps> = ({
 
       await onSubmit(name.trim(), description.trim(), currentCategoryGroup.name, options);
       onClose();
-    } catch (err) {
-      console.error(err);
+    } catch {
+      // Local fallback handled in context
     } finally {
       setIsSubmitting(false);
     }
