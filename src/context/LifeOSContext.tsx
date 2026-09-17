@@ -4,6 +4,7 @@ import {
   AISettings,
   AIMemoryItem,
   Task,
+  TaskStatus,
   Project,
   Skill,
   Goal,
@@ -21,6 +22,7 @@ import {
   KnowledgeCheck,
   SkillMasteryProject,
 } from '../types';
+import { getLocalDateString } from '../utils/dateUtils';
 import {
   initialProfile,
   initialSettings,
@@ -106,6 +108,7 @@ interface LifeOSContextType {
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   toggleTaskComplete: (id: string) => void;
+  setTaskStatus: (id: string, status: TaskStatus) => void;
   breakdownTaskAI: (id: string) => Promise<void>;
   rescheduleTask: (id: string, newDate: string, newTime?: string) => void;
 
@@ -374,7 +377,13 @@ export function LifeOSProvider({ children }: { children: ReactNode }) {
           if (data.memory) setMemory(data.memory);
           if (data.skills) setSkills(data.skills);
           if (data.projects) setProjects(data.projects);
-          if (data.tasks) setTasks(data.tasks);
+          if (Array.isArray(data.tasks)) {
+            setTasks(prev => {
+              // If server has tasks, load them; if server tasks array is empty but local has items, preserve local tasks
+              if (data.tasks.length > 0) return data.tasks;
+              return prev;
+            });
+          }
           if (data.goals) setGoals(data.goals);
           if (data.calendar) setCalendar(data.calendar);
           if (data.stickyNotes) setStickyNotes(data.stickyNotes);
@@ -505,12 +514,38 @@ export function LifeOSProvider({ children }: { children: ReactNode }) {
     setSettings(prev => ({ ...prev, ...updates }));
   };
 
+  // Immediate localStorage persistence for tasks so they reliably survive reloads, restarts, and sessions
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${STORAGE_KEY}_tasks`, JSON.stringify(tasks));
+    } catch (e) {
+      console.error('Failed to save tasks to localStorage:', e);
+    }
+  }, [tasks]);
+
   // --- TASKS ---
   const addTask = (taskData: Omit<Task, 'id' | 'createdAt'>): Task => {
+    const title = (taskData.title || '').trim();
+    if (!title) {
+      throw new Error('Task title cannot be empty.');
+    }
     const newTask: Task = {
       ...taskData,
-      id: 'task-' + Date.now(),
+      id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+      title,
+      description: taskData.description?.trim() || '',
+      priority: taskData.priority || 'medium',
+      status: taskData.status || 'not_started',
+      dueDate: taskData.dueDate || getLocalDateString(),
+      dueTime: taskData.dueTime,
+      estimatedDuration: taskData.estimatedDuration,
+      category: taskData.category,
+      projectId: taskData.projectId,
+      skillId: taskData.skillId,
+      tags: Array.isArray(taskData.tags) ? taskData.tags : [],
+      subtasks: Array.isArray(taskData.subtasks) ? taskData.subtasks : [],
       createdAt: new Date().toISOString(),
+      completedAt: taskData.status === 'completed' ? new Date().toISOString() : undefined,
     };
     setTasks(prev => [newTask, ...prev]);
 
@@ -531,22 +566,75 @@ export function LifeOSProvider({ children }: { children: ReactNode }) {
   };
 
   const updateTask = (id: string, updates: Partial<Task>) => {
-    setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...updates } : t)));
+    setTasks(prev =>
+      prev.map(t => {
+        if (t.id === id) {
+          const updated = { ...t, ...updates };
+          if (updates.status === 'completed' && t.status !== 'completed' && !updated.completedAt) {
+            updated.completedAt = new Date().toISOString();
+          } else if (updates.status && updates.status !== 'completed') {
+            updated.completedAt = undefined;
+          }
+          return updated;
+        }
+        return t;
+      })
+    );
+
+    // Keep calendar items in sync
+    if (updates.title !== undefined || updates.dueDate !== undefined || updates.dueTime !== undefined || updates.priority !== undefined) {
+      setCalendar(prev =>
+        prev.map(c => {
+          if (c.referenceId === id) {
+            return {
+              ...c,
+              title: updates.title !== undefined ? updates.title : c.title,
+              date: updates.dueDate !== undefined ? updates.dueDate : c.date,
+              time: updates.dueTime !== undefined ? updates.dueTime : c.time,
+              color: updates.priority === 'urgent' ? '#EF4444' : c.color,
+            };
+          }
+          return c;
+        })
+      );
+    }
+  };
+
+  const setTaskStatus = (id: string, status: TaskStatus) => {
+    setTasks(prev =>
+      prev.map(t => {
+        if (t.id === id) {
+          const wasCompleted = t.status === 'completed';
+          const isNowCompleted = status === 'completed';
+          const completedAt = isNowCompleted
+            ? (t.completedAt || new Date().toISOString())
+            : undefined;
+          if (isNowCompleted && !wasCompleted) {
+            addDailyWin(`Completed task: "${t.title}"`, 'accomplishment');
+          }
+          return { ...t, status, completedAt };
+        }
+        return t;
+      })
+    );
   };
 
   const deleteTask = (id: string) => {
     setTasks(prev => prev.filter(t => t.id !== id));
     setCalendar(prev => prev.filter(c => c.referenceId !== id));
+    // Clear any active focus sessions or guide references to prevent orphaned references
+    setActiveFocusSession(prev => (prev?.taskId === id ? null : prev));
+    setFloatingGuideState(prev => (prev.taskId === id ? { ...prev, isOpen: false, taskId: undefined } : prev));
   };
 
   const toggleTaskComplete = (id: string) => {
     setTasks(prev =>
       prev.map(t => {
         if (t.id === id) {
-          const isCompleted = t.status !== 'completed';
-          const newStatus = isCompleted ? 'completed' : 'in_progress';
-          const completedAt = isCompleted ? new Date().toISOString() : undefined;
-          if (isCompleted) {
+          const willBeCompleted = t.status !== 'completed';
+          const newStatus: TaskStatus = willBeCompleted ? 'completed' : 'not_started';
+          const completedAt = willBeCompleted ? new Date().toISOString() : undefined;
+          if (willBeCompleted) {
             addDailyWin(`Completed task: "${t.title}"`, 'accomplishment');
           }
           return { ...t, status: newStatus, completedAt };
@@ -1283,8 +1371,11 @@ export function LifeOSProvider({ children }: { children: ReactNode }) {
   };
 
   const startMomentumMode = (task?: Task) => {
-    const target = task || tasks.find(t => t.status === 'in_progress') || tasks[0];
+    const target = task || tasks.find(t => t.status === 'in_progress') || tasks.find(t => t.status !== 'completed') || tasks[0];
     if (target) {
+      if (target.status !== 'completed' && target.status !== 'in_progress') {
+        updateTask(target.id, { status: 'in_progress' });
+      }
       setActiveFocusSession({
         id: 'foc-' + Date.now(),
         title: target.title,
@@ -1615,6 +1706,7 @@ export function LifeOSProvider({ children }: { children: ReactNode }) {
         updateTask,
         deleteTask,
         toggleTaskComplete,
+        setTaskStatus,
         breakdownTaskAI,
         rescheduleTask,
         addSkill,

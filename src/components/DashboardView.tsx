@@ -21,6 +21,7 @@ import { useLifeOS } from '../context/LifeOSContext';
 import { askWhatToDoNow, askWhatToLearnNext } from '../services/aiService';
 import { Task, Skill } from '../types';
 import { getSkillMasteryPercentage } from '../utils/progressEngine';
+import { getLocalDateString, isTaskOverdue, isTaskDueToday } from '../utils/dateUtils';
 
 interface DashboardViewProps {
   onNavigate: (view: any) => void;
@@ -101,9 +102,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onSele
   }, []);
 
   // Today's Tasks
-  const todayDateStr = new Date().toISOString().slice(0, 10);
+  const todayDateStr = getLocalDateString();
   const todayTasks = tasks.filter(
-    t => t.dueDate === todayDateStr || t.status === 'in_progress' || t.priority === 'urgent'
+    t => t.dueDate === todayDateStr || t.status === 'in_progress' || t.priority === 'urgent' || isTaskOverdue(t.dueDate, t.status)
   ).slice(0, 6);
 
   // Upcoming Deadlines (next 7 days)
@@ -267,6 +268,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onSele
                       >
                         {task.title}
                       </span>
+                      {task.status === 'in_progress' && (
+                        <span className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-semibold text-amber-300 bg-amber-500/15 border border-amber-500/30">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+                          in progress
+                        </span>
+                      )}
+                      {!isDone && isTaskOverdue(task.dueDate, task.status) && (
+                        <span className="rounded px-1.5 py-0.5 text-[9px] font-mono text-rose-300 bg-rose-500/10 border border-rose-500/20">
+                          overdue
+                        </span>
+                      )}
                       {task.priority === 'urgent' && (
                         <span className="rounded px-1.5 py-0.2 text-[9px] font-mono uppercase tracking-wider text-rose-300 bg-rose-500/10 border border-rose-500/20">
                           urgent

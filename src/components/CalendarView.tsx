@@ -7,15 +7,17 @@ import {
   Clock,
   Trash2,
   CheckCircle2,
+  Circle,
 } from 'lucide-react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { CalendarItem } from '../types';
+import { getLocalDateString } from '../utils/dateUtils';
 
 export const CalendarView: React.FC = () => {
-  const { calendar, addCalendarItem, deleteCalendarItem } = useLifeOS();
+  const { calendar, addCalendarItem, deleteCalendarItem, tasks, toggleTaskComplete } = useLifeOS();
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDateStr, setSelectedDateStr] = useState(new Date().toISOString().slice(0, 10));
+  const [selectedDateStr, setSelectedDateStr] = useState(getLocalDateString());
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newTime, setNewTime] = useState('10:00');
@@ -168,30 +170,57 @@ export const CalendarView: React.FC = () => {
           </div>
 
           <div className="space-y-2">
-            {selectedDayItems.map(item => (
-              <div
-                key={item.id}
-                className="flex items-start justify-between rounded-lg border border-white/[0.04] bg-white/[0.02] p-3 text-xs"
-              >
-                <div className="space-y-1 min-w-0 flex-1 pr-2">
-                  <span className="font-medium text-neutral-200 truncate block">{item.title}</span>
-                  <div className="flex items-center gap-2 text-[10px] text-neutral-500">
-                    <span className="flex items-center gap-1 font-mono">
-                      <Clock className="h-3 w-3" />
-                      {item.time || 'All day'} ({item.durationMinutes}m)
-                    </span>
-                    <span className="capitalize text-neutral-400">{item.type}</span>
-                  </div>
-                </div>
+            {selectedDayItems.map(item => {
+              const linkedTask = item.referenceId ? tasks.find(t => t.id === item.referenceId) : undefined;
+              const isTaskCompleted = linkedTask?.status === 'completed';
 
-                <button
-                  onClick={() => deleteCalendarItem(item.id)}
-                  className="text-neutral-500 hover:text-rose-400 p-0.5 transition-colors"
+              return (
+                <div
+                  key={item.id}
+                  className={`flex items-start justify-between rounded-lg border border-white/[0.04] p-3 text-xs transition-all ${
+                    isTaskCompleted ? 'bg-white/[0.01] opacity-50' : 'bg-white/[0.02]'
+                  }`}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-start gap-2.5 min-w-0 flex-1 pr-2">
+                    {linkedTask && (
+                      <button
+                        onClick={() => toggleTaskComplete(linkedTask.id)}
+                        className="mt-0.5 text-neutral-500 hover:text-neutral-300 transition-colors shrink-0"
+                        title={isTaskCompleted ? 'Mark incomplete' : 'Mark complete'}
+                      >
+                        {isTaskCompleted ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                        ) : (
+                          <Circle className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    )}
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <span className={`font-medium truncate block ${isTaskCompleted ? 'line-through text-neutral-500' : 'text-neutral-200'}`}>
+                        {item.title}
+                      </span>
+                      <div className="flex items-center gap-2 text-[10px] text-neutral-500">
+                        <span className="flex items-center gap-1 font-mono">
+                          <Clock className="h-3 w-3" />
+                          {item.time || 'All day'} ({item.durationMinutes}m)
+                        </span>
+                        <span className="capitalize text-neutral-400">{item.type}</span>
+                        {linkedTask && (
+                          <span className="text-neutral-500">· Linked Task</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => deleteCalendarItem(item.id)}
+                    className="text-neutral-500 hover:text-rose-400 p-0.5 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+            })}
 
             {selectedDayItems.length === 0 && (
               <div className="py-8 text-center text-xs text-neutral-500">

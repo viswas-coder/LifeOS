@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import { useLifeOS } from '../context/LifeOSContext';
+import { getLocalDateString } from '../utils/dateUtils';
 
 interface QuickAddModalProps {
   onNavigateToAgent?: () => void;
@@ -32,7 +33,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ onNavigateToAgent 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
-  const [dueDate, setDueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [dueDate, setDueDate] = useState(getLocalDateString());
 
   if (!isQuickAddOpen) return null;
 
