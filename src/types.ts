@@ -288,6 +288,26 @@ export interface CalendarItem {
   color?: string;
 }
 
+export type Weekday = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+
+export interface Subject {
+  id: string;
+  code: string;
+  name: string;
+  faculty: string;
+  building: string;
+  room: string;
+  color?: string;
+}
+
+export interface TimetableEntry {
+  id: string;
+  weekday: Weekday;
+  subjectId: string;
+  startTime: string; // e.g. "09:30 AM"
+  endTime: string;   // e.g. "10:20 AM"
+}
+
 export interface StickyNoteTaskItem {
   id: string;
   title: string;
