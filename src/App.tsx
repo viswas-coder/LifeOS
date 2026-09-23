@@ -14,6 +14,7 @@ import { IdeasAndNotesView } from './components/IdeasAndNotesView';
 import { KnowledgeBaseView } from './components/KnowledgeBaseView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { AIMemoryView } from './components/AIMemoryView';
+import { WhatsAppAgentView } from './components/WhatsAppAgentView';
 import { SettingsView } from './components/SettingsView';
 import { FloatingAIGuide } from './components/FloatingAIGuide';
 import { MomentumModeOverlay } from './components/MomentumModeOverlay';
@@ -33,6 +34,7 @@ function MainLayout() {
   const viewTitles: Record<NavView, string> = {
     dashboard: 'Dashboard',
     ai_agent: 'AI Co-pilot & Autonomous Execution',
+    whatsapp_agent: 'WhatsApp AI Agent',
     tasks: 'Task Engine',
     projects: 'Projects & Architecture',
     skills: 'Skill Mastery Engine',
@@ -122,6 +124,7 @@ function MainLayout() {
           onBack={handleBack}
           backLabel={history.length > 1 ? 'Back' : 'Dashboard'}
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+          onNavigate={handleNavigate}
         />
 
         <main className="flex-1 overflow-y-auto pb-16">
@@ -129,6 +132,7 @@ function MainLayout() {
             <DashboardView onNavigate={handleNavigate} onSelectSkill={handleSelectSkill} />
           )}
           {currentView === 'ai_agent' && <AIAgentView />}
+          {currentView === 'whatsapp_agent' && <WhatsAppAgentView />}
           {currentView === 'tasks' && <TasksView />}
           {currentView === 'projects' && <ProjectsView />}
           {currentView === 'skills' && (

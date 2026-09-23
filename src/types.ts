@@ -404,3 +404,42 @@ export interface ChatMessage {
   };
   suggestions?: string[];
 }
+
+export type WhatsAppItemType = 'task' | 'calendar_event' | 'idea' | 'casual';
+
+export interface WhatsAppParsedData {
+  isActionable: boolean;
+  type: WhatsAppItemType;
+  title: string;
+  description: string;
+  priority: 'urgent' | 'high' | 'medium' | 'low';
+  dueDate?: string; // YYYY-MM-DD
+  dueTime?: string; // HH:mm
+  estimatedDuration?: number; // minutes
+  tags: string[];
+  confidence: number; // 0.0 - 1.0
+  reasoning: string;
+}
+
+export interface WhatsAppSuggestion {
+  id: string;
+  messageId: string;
+  sender: string;
+  senderName?: string;
+  rawMessage: string;
+  receivedAt: string;
+  status: 'pending' | 'approved' | 'rejected';
+  parsedData: WhatsAppParsedData;
+  approvedAt?: string;
+  createdItemId?: string;
+  targetType?: WhatsAppItemType;
+}
+
+export interface WhatsAppConfig {
+  enabled: boolean;
+  verifyToken: string;
+  allowedSenders: string[];
+  autoCategorize: boolean;
+  notificationOnReceived: boolean;
+  defaultPriority: 'urgent' | 'high' | 'medium' | 'low';
+}

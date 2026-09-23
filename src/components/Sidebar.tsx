@@ -17,12 +17,14 @@ import {
   Sparkles,
   Zap,
   LogOut,
+  MessageSquareQuote,
 } from 'lucide-react';
 import { useLifeOS } from '../context/LifeOSContext';
 
 export type NavView =
   | 'dashboard'
   | 'ai_agent'
+  | 'whatsapp_agent'
   | 'tasks'
   | 'projects'
   | 'skills'
@@ -47,11 +49,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed,
   onToggleCollapse,
 }) => {
-  const { profile, skillsProgressPercentage, startMomentumMode, skills, currentUser, logout } = useLifeOS();
+  const { profile, skillsProgressPercentage, startMomentumMode, skills, currentUser, logout, pendingWhatsAppCount } = useLifeOS();
 
   const navItems: { id: NavView; label: string; icon: React.FC<{ className?: string }>; badge?: string | number }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'ai_agent', label: 'AI Agent', icon: Bot, badge: 'AI' },
+    {
+      id: 'whatsapp_agent',
+      label: 'WhatsApp Agent',
+      icon: MessageSquareQuote,
+      badge: pendingWhatsAppCount > 0 ? pendingWhatsAppCount : undefined,
+    },
     { id: 'tasks', label: 'Tasks', icon: CheckSquare },
     { id: 'projects', label: 'Projects', icon: FolderGit2 },
     { id: 'skills', label: 'Skills & Mastery', icon: GraduationCap, badge: skills.length },

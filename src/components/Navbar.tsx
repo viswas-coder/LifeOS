@@ -10,8 +10,10 @@ import {
   CheckCircle2,
   ChevronLeft,
   StickyNote as StickyNoteIcon,
+  MessageSquareQuote,
 } from 'lucide-react';
 import { useLifeOS } from '../context/LifeOSContext';
+import { NavView } from './Sidebar';
 
 interface NavbarProps {
   onOpenMobileMenu?: () => void;
@@ -19,6 +21,7 @@ interface NavbarProps {
   canGoBack?: boolean;
   onBack?: () => void;
   backLabel?: string;
+  onNavigate?: (view: NavView) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -27,6 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   canGoBack,
   onBack,
   backLabel,
+  onNavigate,
 }) => {
   const {
     setIsSearchOpen,
@@ -38,6 +42,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     stickyNotes,
     updateStickyNote,
     openDailyProgressStickyNote,
+    pendingWhatsAppCount,
   } = useLifeOS();
 
   const [currentTimeStr, setCurrentTimeStr] = useState('');
@@ -122,6 +127,22 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span className="text-xs font-medium text-zinc-300 font-mono tracking-tight">{currentTimeStr}</span>
           <span className="text-[10px] text-zinc-500 font-medium">{currentDateStr}</span>
         </div>
+
+        {/* WhatsApp Pending Review Indicator */}
+        {pendingWhatsAppCount > 0 && (
+          <button
+            id="btn-nav-whatsapp"
+            onClick={() => onNavigate?.('whatsapp_agent')}
+            className="flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1.5 text-xs font-medium text-amber-300 transition-colors animate-pulse"
+            title={`${pendingWhatsAppCount} pending WhatsApp items to review`}
+          >
+            <MessageSquareQuote className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">WhatsApp</span>
+            <span className="rounded-full bg-amber-500/30 px-1.5 py-0.2 text-[10px] font-mono font-bold">
+              {pendingWhatsAppCount}
+            </span>
+          </button>
+        )}
 
         {/* Daily Briefing */}
         <button

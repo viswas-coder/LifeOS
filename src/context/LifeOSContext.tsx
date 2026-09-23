@@ -21,8 +21,19 @@ import {
   SkillTopic,
   KnowledgeCheck,
   SkillMasteryProject,
+  WhatsAppSuggestion,
+  WhatsAppItemType,
+  Priority,
 } from '../types';
 import { getLocalDateString } from '../utils/dateUtils';
+import {
+  fetchWhatsAppSuggestions,
+  simulateWhatsAppMessage,
+  approveWhatsAppSuggestionApi,
+  rejectWhatsAppSuggestionApi,
+  deleteWhatsAppSuggestionApi,
+  clearProcessedWhatsAppSuggestionsApi,
+} from '../services/whatsappService';
 import {
   initialProfile,
   initialSettings,
@@ -195,6 +206,31 @@ interface LifeOSContextType {
   importDataJSON: (jsonStr: string) => boolean;
   restoreDefaults: () => void;
 
+  // WhatsApp AI Agent
+  whatsappSuggestions: WhatsAppSuggestion[];
+  pendingWhatsAppCount: number;
+  isLoadingWhatsApp: boolean;
+  loadWhatsAppSuggestions: () => Promise<void>;
+  approveWhatsAppSuggestion: (
+    id: string,
+    overrides?: {
+      title?: string;
+      description?: string;
+      priority?: Priority;
+      dueDate?: string;
+      dueTime?: string;
+      type?: WhatsAppItemType;
+    }
+  ) => Promise<{ success: boolean; createdItemId?: string }>;
+  rejectWhatsAppSuggestion: (id: string) => Promise<boolean>;
+  deleteWhatsAppSuggestion: (id: string) => Promise<boolean>;
+  clearProcessedWhatsAppSuggestions: () => Promise<boolean>;
+  simulateIncomingWhatsAppMessage: (
+    message: string,
+    sender?: string,
+    senderName?: string
+  ) => Promise<{ success: boolean; suggestion?: WhatsAppSuggestion; error?: string }>;
+
   // Metrics
   skillsProgressPercentage: number;
   dailyProgressPercentage: number;
@@ -360,6 +396,23 @@ export function LifeOSProvider({ children }: { children: ReactNode }) {
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isDailyBriefingOpen, setIsDailyBriefingOpen] = useState(false);
 
+  // WhatsApp AI Agent State
+  const [whatsappSuggestions, setWhatsappSuggestions] = useState<WhatsAppSuggestion[]>([]);
+  const [isLoadingWhatsApp, setIsLoadingWhatsApp] = useState(false);
+
+  const loadWhatsAppSuggestions = async (token?: string | null) => {
+    setIsLoadingWhatsApp(true);
+    try {
+      const activeToken = token || authToken || localStorage.getItem('lifeos_auth_token');
+      const list = await fetchWhatsAppSuggestions(activeToken || undefined);
+      setWhatsappSuggestions(list);
+    } catch (err) {
+      console.error('Failed to load WhatsApp suggestions:', err);
+    } finally {
+      setIsLoadingWhatsApp(false);
+    }
+  };
+
   // Load workspace data from server
   const loadWorkspaceFromServer = async (token?: string | null) => {
     const activeToken = token || authToken || localStorage.getItem('lifeos_auth_token');
@@ -425,6 +478,7 @@ export function LifeOSProvider({ children }: { children: ReactNode }) {
           setAuthStatus('authenticated');
           setAuthToken(token);
           loadWorkspaceFromServer(token);
+          loadWhatsAppSuggestions(token);
         } else {
           setAuthStatus('unauthenticated');
           setCurrentUser(null);
@@ -440,6 +494,16 @@ export function LifeOSProvider({ children }: { children: ReactNode }) {
       isMounted = false;
     };
   }, []);
+
+  // Poll for incoming WhatsApp suggestions every 15 seconds
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || !authToken) return;
+    loadWhatsAppSuggestions(authToken);
+    const interval = setInterval(() => {
+      loadWhatsAppSuggestions(authToken);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [authStatus, authToken]);
 
   // Sync state to local storage cache & server
   useEffect(() => {
@@ -1663,6 +1727,138 @@ export function LifeOSProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // WhatsApp Action Handlers
+  const pendingWhatsAppCount = useMemo(
+    () => whatsappSuggestions.filter(s => s.status === 'pending' && s.parsedData.isActionable).length,
+    [whatsappSuggestions]
+  );
+
+  const approveWhatsAppSuggestion = async (
+    id: string,
+    overrides?: {
+      title?: string;
+      description?: string;
+      priority?: Priority;
+      dueDate?: string;
+      dueTime?: string;
+      type?: WhatsAppItemType;
+    }
+  ): Promise<{ success: boolean; createdItemId?: string }> => {
+    const suggestion = whatsappSuggestions.find(s => s.id === id);
+    if (!suggestion) return { success: false };
+
+    const targetType = overrides?.type || suggestion.parsedData.type || 'task';
+    const finalTitle = (overrides?.title || suggestion.parsedData.title || 'Untitled WhatsApp Item').trim();
+    const finalDesc = overrides?.description !== undefined ? overrides.description : suggestion.parsedData.description;
+    const finalPriority = overrides?.priority || suggestion.parsedData.priority || 'medium';
+    const finalDueDate = overrides?.dueDate || suggestion.parsedData.dueDate || getLocalDateString();
+    const finalDueTime = overrides?.dueTime || suggestion.parsedData.dueTime;
+    const finalTags = suggestion.parsedData.tags || ['whatsapp'];
+
+    let createdId = '';
+
+    if (targetType === 'task') {
+      const created = addTask({
+        title: finalTitle,
+        description: finalDesc,
+        priority: finalPriority,
+        status: 'not_started',
+        dueDate: finalDueDate,
+        dueTime: finalDueTime,
+        estimatedDuration: suggestion.parsedData.estimatedDuration || 30,
+        tags: finalTags.includes('whatsapp') ? finalTags : ['whatsapp', ...finalTags],
+        subtasks: [],
+      });
+      createdId = created.id;
+    } else if (targetType === 'calendar_event') {
+      const created = addCalendarItem({
+        title: finalTitle,
+        date: finalDueDate,
+        time: finalDueTime,
+        durationMinutes: suggestion.parsedData.estimatedDuration || 60,
+        type: 'event',
+        color: '#10B981',
+      });
+      createdId = created.id;
+    } else if (targetType === 'idea') {
+      const created = addIdea({
+        title: finalTitle,
+        description: finalDesc,
+        category: 'project',
+        tags: finalTags,
+        status: 'inbox',
+      });
+      createdId = created.id;
+    } else {
+      const created = addTask({
+        title: finalTitle,
+        description: finalDesc,
+        priority: 'low',
+        status: 'not_started',
+        dueDate: finalDueDate,
+        tags: ['whatsapp'],
+        subtasks: [],
+      });
+      createdId = created.id;
+    }
+
+    // Call server to update suggestion status
+    const activeToken = authToken || localStorage.getItem('lifeos_auth_token');
+    await approveWhatsAppSuggestionApi(id, createdId, activeToken || undefined);
+
+    setWhatsappSuggestions(prev =>
+      prev.map(s =>
+        s.id === id
+          ? {
+              ...s,
+              status: 'approved',
+              createdItemId: createdId,
+              approvedAt: new Date().toISOString(),
+            }
+          : s
+      )
+    );
+
+    addDailyWin(`Approved WhatsApp item: "${finalTitle}"`, 'accomplishment');
+    return { success: true, createdItemId: createdId };
+  };
+
+  const rejectWhatsAppSuggestion = async (id: string): Promise<boolean> => {
+    const activeToken = authToken || localStorage.getItem('lifeos_auth_token');
+    const ok = await rejectWhatsAppSuggestionApi(id, activeToken || undefined);
+    setWhatsappSuggestions(prev =>
+      prev.map(s => (s.id === id ? { ...s, status: 'rejected' } : s))
+    );
+    return ok;
+  };
+
+  const deleteWhatsAppSuggestion = async (id: string): Promise<boolean> => {
+    const activeToken = authToken || localStorage.getItem('lifeos_auth_token');
+    const ok = await deleteWhatsAppSuggestionApi(id, activeToken || undefined);
+    setWhatsappSuggestions(prev => prev.filter(s => s.id !== id));
+    return ok;
+  };
+
+  const clearProcessedWhatsAppSuggestions = async (): Promise<boolean> => {
+    const activeToken = authToken || localStorage.getItem('lifeos_auth_token');
+    const ok = await clearProcessedWhatsAppSuggestionsApi(activeToken || undefined);
+    setWhatsappSuggestions(prev => prev.filter(s => s.status === 'pending'));
+    return ok;
+  };
+
+  const simulateIncomingWhatsAppMessage = async (
+    message: string,
+    sender = '+1 (555) 019-2834',
+    senderName = 'Alex Mercer'
+  ) => {
+    const activeToken = authToken || localStorage.getItem('lifeos_auth_token');
+    const res = await simulateWhatsAppMessage(message, sender, senderName, activeToken || undefined);
+    if (res.success && res.suggestion) {
+      setWhatsappSuggestions(prev => [res.suggestion!, ...prev]);
+    }
+    return res;
+  };
+
   return (
     <LifeOSContext.Provider
       value={{
@@ -1675,6 +1871,15 @@ export function LifeOSProvider({ children }: { children: ReactNode }) {
         changeAdminPassword,
         updateAdminProfileName,
         restoreWorkspaceBackup,
+        whatsappSuggestions,
+        pendingWhatsAppCount,
+        isLoadingWhatsApp,
+        loadWhatsAppSuggestions,
+        approveWhatsAppSuggestion,
+        rejectWhatsAppSuggestion,
+        deleteWhatsAppSuggestion,
+        clearProcessedWhatsAppSuggestions,
+        simulateIncomingWhatsAppMessage,
         profile,
         settings,
         memory,

@@ -16,8 +16,11 @@ import {
   LogOut,
   AlertCircle,
   CheckCircle2,
+  MessageSquareQuote,
+  Copy,
 } from 'lucide-react';
 import { useLifeOS } from '../context/LifeOSContext';
+import { getWhatsAppConfigApi, saveWhatsAppConfigApi } from '../services/whatsappService';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -44,6 +47,47 @@ export const SettingsView: React.FC = () => {
 
   const [displayNameInput, setDisplayNameInput] = useState(currentUser?.displayName || profile.name);
   const [nameStatus, setNameStatus] = useState<string | null>(null);
+
+  // WhatsApp Integration Settings
+  const [waConfig, setWaConfig] = useState<{
+    enabled: boolean;
+    verifyToken: string;
+    allowedSenders: string[];
+    defaultPriority: 'urgent' | 'high' | 'medium' | 'low';
+  }>({
+    enabled: true,
+    verifyToken: 'lifeos_whatsapp_verify_token_2026',
+    allowedSenders: [],
+    defaultPriority: 'medium',
+  });
+  const [waWhitelistInput, setWaWhitelistInput] = useState('');
+  const [waSaveStatus, setWaSaveStatus] = useState<string | null>(null);
+  const [waCopied, setWaCopied] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    getWhatsAppConfigApi().then(cfg => {
+      if (cfg) {
+        setWaConfig(cfg);
+        setWaWhitelistInput(cfg.allowedSenders?.join(', ') || '');
+      }
+    });
+  }, []);
+
+  const handleSaveWaConfig = async () => {
+    const senders = waWhitelistInput
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    const updated = await saveWhatsAppConfigApi({
+      ...waConfig,
+      allowedSenders: senders,
+    });
+    if (updated) {
+      setWaConfig(updated);
+      setWaSaveStatus('WhatsApp integration settings saved successfully.');
+      setTimeout(() => setWaSaveStatus(null), 3000);
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -381,6 +425,108 @@ export const SettingsView: React.FC = () => {
               className="w-full rounded-lg border border-white/[0.08] bg-[#0c0d12] px-3 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-white/[0.2]"
             />
           </div>
+        </div>
+      </div>
+
+      {/* WhatsApp AI Webhook & Integration */}
+      <div className="surface-card rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-white/[0.06] pb-2.5">
+          <div className="flex items-center gap-2 text-xs font-semibold text-neutral-200">
+            <MessageSquareQuote className="h-4 w-4 text-emerald-400" />
+            <h3>WhatsApp AI Integration & Webhook</h3>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-neutral-300 cursor-pointer">
+            <span>Enabled</span>
+            <input
+              type="checkbox"
+              checked={waConfig.enabled}
+              onChange={e => setWaConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+              className="rounded border-white/[0.2] bg-white/[0.05] text-emerald-500 focus:ring-0"
+            />
+          </label>
+        </div>
+
+        <p className="text-xs text-neutral-400 leading-relaxed max-w-2xl">
+          Authorized Meta WhatsApp Cloud API webhooks automatically analyze messages with Gemini 3.8 Flash, extract deadlines and meetings, and send them to your review queue before modifying your tasks or calendar.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="rounded-lg border border-white/[0.08] bg-[#0c0d12] p-2.5 space-y-1">
+            <div className="flex items-center justify-between text-[11px] text-neutral-400">
+              <span>Webhook Endpoint</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = `${window.location.origin}/api/whatsapp/webhook`;
+                  navigator.clipboard.writeText(url);
+                  setWaCopied('url');
+                  setTimeout(() => setWaCopied(null), 2000);
+                }}
+                className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300"
+              >
+                {waCopied === 'url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                <span>{waCopied === 'url' ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+            <p className="font-mono text-xs text-neutral-300 truncate">
+              {typeof window !== 'undefined' ? `${window.location.origin}/api/whatsapp/webhook` : '/api/whatsapp/webhook'}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-white/[0.08] bg-[#0c0d12] p-2.5 space-y-1">
+            <div className="flex items-center justify-between text-[11px] text-neutral-400">
+              <span>Verify Token</span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(waConfig.verifyToken);
+                  setWaCopied('token');
+                  setTimeout(() => setWaCopied(null), 2000);
+                }}
+                className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300"
+              >
+                {waCopied === 'token' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                <span>{waCopied === 'token' ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+            <p className="font-mono text-xs text-neutral-300 truncate">
+              {waConfig.verifyToken}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="block text-xs text-neutral-300">
+            Allowed Senders Whitelist (Optional)
+          </label>
+          <input
+            type="text"
+            value={waWhitelistInput}
+            onChange={e => setWaWhitelistInput(e.target.value)}
+            placeholder="e.g. +15551234567, +15559876543 (leave empty to accept from all senders)"
+            className="w-full rounded-lg border border-white/[0.08] bg-[#0c0d12] px-3 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-white/[0.2]"
+          />
+          <span className="text-[11px] text-neutral-500">
+            Comma-separated international phone numbers. If empty, messages from any sender will be analyzed.
+          </span>
+        </div>
+
+        {waSaveStatus && (
+          <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2 text-xs text-emerald-400 flex items-center gap-2">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span>{waSaveStatus}</span>
+          </div>
+        )}
+
+        <div className="flex justify-end pt-1">
+          <button
+            type="button"
+            onClick={handleSaveWaConfig}
+            className="flex items-center gap-1.5 rounded-lg bg-neutral-100 hover:bg-white px-3 py-1.5 text-xs font-medium text-neutral-950 transition-all shadow-ambient-sm"
+          >
+            <Check className="h-3.5 w-3.5" />
+            <span>Save WhatsApp Settings</span>
+          </button>
         </div>
       </div>
 

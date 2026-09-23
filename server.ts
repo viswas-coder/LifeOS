@@ -18,6 +18,7 @@ import {
   restoreAdminWorkspace,
   createEmptyWorkspace,
 } from './server/authStorage';
+import { createWhatsAppRouter } from './server/whatsapp/routes';
 
 dotenv.config();
 
@@ -265,6 +266,9 @@ app.post('/api/workspace/reset', requireAuth, (req: Request, res: Response) => {
     res.status(500).json({ error: err.message || 'Failed to reset workspace.' });
   }
 });
+
+// --- WHATSAPP AI AGENT & WEBHOOK INTEGRATION ---
+app.use('/api/whatsapp', createWhatsAppRouter(getGeminiClient, getUserFromToken, extractToken));
 
 // 1. AI AGENT CHAT & NATURAL LANGUAGE CONTROL
 app.post('/api/ai/agent', async (req: Request, res: Response) => {
