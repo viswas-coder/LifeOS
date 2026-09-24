@@ -151,6 +151,18 @@ export function createWhatsAppRouter(
       const token = extractToken(req);
       const user = getUserFromToken(token);
       const body = req.body || {};
+
+      // Lightweight connectivity probe from the Android Companion.
+      // This is intentionally handled before normal ingest validation so
+      // Test Ping can verify reachability without creating a suggestion.
+      if (body.ping === 'true' || body.eventType === 'ping') {
+        return res.status(200).json({
+          success: true,
+          status: 'reachable',
+          message: 'LifeOS WhatsApp personal-ingest endpoint is reachable.',
+        });
+      }
+
       const message = typeof body.message === 'string' ? body.message.trim() : '';
       const deduplicationId = typeof body.deduplicationId === 'string' ? body.deduplicationId.trim() : '';
 
