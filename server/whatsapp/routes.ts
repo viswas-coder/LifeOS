@@ -143,6 +143,85 @@ export function createWhatsAppRouter(
     }
   });
 
+  // Personal Android Companion ingest endpoint.
+  // Receives raw WhatsApp notification events from the official Android
+  // NotificationListenerService bridge and queues an AI suggestion.
+  router.post('/personal-ingest', async (req: Request, res: Response) => {
+    try {
+      const token = extractToken(req);
+      const user = getUserFromToken(token);
+      const body = req.body || {};
+      const message = typeof body.message === 'string' ? body.message.trim() : '';
+      const deduplicationId = typeof body.deduplicationId === 'string' ? body.deduplicationId.trim() : '';
+
+      if (!message || !deduplicationId) {
+        return res.status(400).json({
+          success: false,
+          message: 'message and deduplicationId are required.',
+        });
+      }
+
+      const config = getWhatsAppConfig(user, token);
+      if (!config.enabled) {
+        return res.status(200).json({
+          success: false,
+          status: 'disabled',
+          message: 'WhatsApp integration is disabled in LifeOS configuration.',
+        });
+      }
+
+      if (isMessageProcessed(user, token, deduplicationId)) {
+        return res.status(200).json({
+          success: true,
+          status: 'duplicate',
+          message: 'Notification already processed.',
+          ingestId: deduplicationId,
+        });
+      }
+
+      const timestampMs = Number(body.timestamp);
+      const receivedAt = Number.isFinite(timestampMs) && timestampMs > 0
+        ? new Date(timestampMs).toISOString()
+        : new Date().toISOString();
+      const senderName = typeof body.conversationTitle === 'string' && body.conversationTitle.trim()
+        ? body.conversationTitle.trim()
+        : (typeof body.sender === 'string' && body.sender.trim() ? body.sender.trim() : 'WhatsApp');
+
+      const ai = getAiClient();
+      const parsed = ai
+        ? await analyzeWhatsAppMessageWithGemini(ai, message, senderName, receivedAt)
+        : await (await import('./analyzer')).fallbackWhatsAppAnalyze(message, senderName);
+
+      const suggestion: WhatsAppSuggestion = {
+        id: `wa-personal-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        messageId: deduplicationId,
+        sender: typeof body.sender === 'string' ? body.sender : 'WhatsApp',
+        senderName,
+        rawMessage: message,
+        receivedAt,
+        status: 'pending',
+        parsedData: parsed,
+        targetType: parsed.type,
+      };
+
+      addSuggestion(user, token, suggestion);
+      markMessageProcessed(user, token, deduplicationId);
+
+      return res.status(200).json({
+        success: true,
+        status: 'queued',
+        ingestId: suggestion.id,
+        message: 'WhatsApp notification received and queued for approval.',
+      });
+    } catch (err: any) {
+      console.error('[WhatsApp Personal Ingest] Error:', err);
+      return res.status(500).json({
+        success: false,
+        message: err.message || 'Failed to ingest WhatsApp notification.',
+      });
+    }
+  });
+
   // Test Message Simulation endpoint (Allows full interactive testing without external tunnel)
   router.post('/test-message', async (req: Request, res: Response) => {
     try {
